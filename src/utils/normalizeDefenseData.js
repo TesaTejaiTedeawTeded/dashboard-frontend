@@ -14,20 +14,39 @@ export const normalizeDefenseData = (data) => {
     const payload = data.data || data;
     const timestamp = payload.timestamp || new Date().toISOString();
     const objectsRaw = Array.isArray(payload.objects) ? payload.objects : [];
-    const sharedImage = buildImageUrl(payload.image?.path);
+    const sharedImage = buildImageUrl(
+        payload.imagePath || payload.image?.path
+    );
+
+    const toNumber = (value) => {
+        if (value === null || value === undefined || value === "") return null;
+        const num = Number(value);
+        return Number.isFinite(num) ? num : null;
+    };
 
     const objects = objectsRaw.map((object) => ({
-        objId: object.obj_id || object.id || object.objId || crypto.randomUUID(),
-        lat: object.lat ?? null,
-        long: object.lng ?? object.long ?? null,
-        alt: object.alt ?? null,
-        imgPath: buildImageUrl(object.imgPath) || sharedImage || null,
+        objId:
+            object.obj_id ||
+            object.id ||
+            object.objId ||
+            crypto.randomUUID(),
+        lat: toNumber(object.lat),
+        long:
+            toNumber(object.long) ??
+            toNumber(object.lng) ??
+            toNumber(object.lon),
+        alt: toNumber(object.alt),
     }));
 
     return {
         timestamp,
-        camLat: payload.camera?.lat ?? payload.camLat ?? null,
-        camLong: payload.camera?.lng ?? payload.camera?.long ?? payload.camLong ?? null,
+        camLat:
+            toNumber(payload.camera?.lat) ?? toNumber(payload.camLat) ?? null,
+        camLong:
+            toNumber(payload.camera?.lng ?? payload.camera?.long) ??
+            toNumber(payload.camLong) ??
+            null,
+        imagePath: sharedImage,
         count: objects.length,
         objects,
     };

@@ -20,8 +20,7 @@ const History = () => {
                 <div>
                     <h1 className="page-title">Historical telemetry</h1>
                     <p className="page-subtitle">
-                        Query retained MQTT payloads to trace the full mission
-                        timeline.
+                        Kae Yak Pen Kon Tee Tuk Rak 😘.
                     </p>
                 </div>
             </header>

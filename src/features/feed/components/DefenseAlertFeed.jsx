@@ -30,7 +30,7 @@ const DefenseAlertFeed = () => {
         const newAlert = {
             id: crypto.randomUUID(),
             timestamp: normalized.timestamp,
-            imagePath: normalized.objects[0]?.imgPath || null,
+            imagePath: normalized.imagePath || null,
             count: normalized.count,
             objects: normalized.objects,
         };
