@@ -320,6 +320,10 @@ body {
     border: 1px solid rgba(255, 255, 255, 0.07);
 }
 
+.map-slider--expanded {
+    height: clamp(420px, 75vh, 900px);
+}
+
 .map-slider__label {
     position: absolute;
     top: 1.25rem;
@@ -408,6 +412,64 @@ body {
 .modal-panel {
     width: min(640px, 100%);
     padding: 2rem;
+}
+
+.fullscreen-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(2, 6, 23, 0.92);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: clamp(1rem, 3vw, 2rem);
+    z-index: 60;
+}
+
+.fullscreen-panel {
+    width: min(1400px, 95vw);
+    height: min(90vh, 900px);
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+@media (max-width: 768px) {
+    .fullscreen-panel {
+        height: auto;
+        max-height: 95vh;
+    }
+}
+
+.history-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    width: 100%;
+    text-align: left;
+    background: rgba(15, 23, 42, 0.55);
+    padding: 1.25rem 1rem;
+    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    margin: 0.35rem 0;
+    transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.history-row:hover {
+    border-color: rgba(255, 255, 255, 0.25);
+    transform: translateY(-2px);
+}
+
+.history-raw {
+    background: rgba(4, 7, 22, 0.85);
+    border-radius: 18px;
+    padding: 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    max-height: 240px;
+    overflow: auto;
+    font-family: "JetBrains Mono", "SFMono-Regular", ui-monospace, monospace;
+    font-size: 0.8rem;
+    color: #e2e8f0;
 }
 
 .modal-close {

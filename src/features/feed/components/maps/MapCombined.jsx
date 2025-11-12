@@ -2,8 +2,33 @@ import { useEffect, useRef } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { useSocket } from "../../../../hooks/useSocket.js";
+import {
+    createCameraConfig,
+    hasCameraConfig,
+} from "../../../../utils/cameraConfig.js";
+import { normalizeOffensiveData } from "../../../../utils/normalizeOffensiveData.js";
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
+
+// ✅ Helper: ตรวจและแปลงค่าความสูง
+const parseAltitude = (value) => {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : 0;
+};
+
+// ✅ Helper: ตรวจพิกัดว่าถูกต้องหรือไม่
+const isValidCoordinate = (lat, lng) =>
+    Number.isFinite(lat) && Number.isFinite(lng);
+
+const offensiveCameraConfig = createCameraConfig({
+    mock: import.meta.env.VITE_OFF_CAM_ID,
+    real: import.meta.env.VITE_OFF_CAM_ID_REAL,
+});
+
+const defensiveCameraConfig = createCameraConfig({
+    mock: import.meta.env.VITE_DEF_CAM_ID,
+    real: import.meta.env.VITE_DEF_CAM_ID_REAL,
+});
 
 const MapCombined = ({ enabled = true }) => {
     const mapContainer = useRef(null);
@@ -11,35 +36,113 @@ const MapCombined = ({ enabled = true }) => {
     const offMarkersRef = useRef({});
     const defMarkersRef = useRef({});
 
-    const offCamId = import.meta.env.VITE_OFF_CAM_ID;
-    const defCamId = import.meta.env.VITE_DEF_CAM_ID;
+    const hasOffensiveCams = hasCameraConfig(offensiveCameraConfig);
+    const hasDefensiveCams = hasCameraConfig(defensiveCameraConfig);
 
-    const { realtimeData: offData } = useSocket(offCamId, enabled);
-    const { realtimeData: defData } = useSocket(defCamId, enabled);
+    const {
+        realtimeData: offData,
+        isConnected: isOffConnected,
+        mode: offMode,
+    } = useSocket(
+        offensiveCameraConfig,
+        enabled && hasOffensiveCams,
+        { events: ["object_detection"] }
+    );
+    const {
+        realtimeData: defData,
+        isConnected: isDefConnected,
+        mode: defMode,
+    } = useSocket(
+        defensiveCameraConfig,
+        enabled && hasDefensiveCams,
+        { events: ["defensive_alert", "object_detection"] }
+    );
+    const socketMode = offMode || defMode;
+    const isConnected = isOffConnected || isDefConnected;
 
+    // ✅ Initialize map once (with 3D terrain and buildings)
     useEffect(() => {
         if (mapRef.current) return;
-        mapRef.current = new mapboxgl.Map({
+
+        const map = new mapboxgl.Map({
             container: mapContainer.current,
             style: "mapbox://styles/mapbox/satellite-streets-v12",
             center: [101.17, 14.29],
             zoom: 14,
+            pitch: 60, // มุมเอียง
+            bearing: -20, // หมุนกล้องเล็กน้อย
+            antialias: true, // ขอบภาพเนียนขึ้น
+        });
+
+        mapRef.current = map;
+
+        map.on("style.load", () => {
+            // --- Terrain DEM ---
+            map.addSource("mapbox-dem", {
+                type: "raster-dem",
+                url: "mapbox://mapbox.mapbox-terrain-dem-v1",
+                tileSize: 512,
+                maxzoom: 14,
+            });
+
+            // --- Enable 3D terrain ---
+            map.setTerrain({ source: "mapbox-dem", exaggeration: 1.5 });
+
+            // --- Add 3D buildings ---
+            const layers = map.getStyle().layers;
+            const labelLayerId = layers.find(
+                (layer) => layer.type === "symbol" && layer.layout["text-field"]
+            )?.id;
+
+            map.addLayer(
+                {
+                    id: "3d-buildings",
+                    source: "composite",
+                    "source-layer": "building",
+                    filter: ["==", "extrude", "true"],
+                    type: "fill-extrusion",
+                    minzoom: 15,
+                    paint: {
+                        "fill-extrusion-color": "#aaa",
+                        "fill-extrusion-height": ["get", "height"],
+                        "fill-extrusion-base": ["get", "min_height"],
+                        "fill-extrusion-opacity": 0.6,
+                    },
+                },
+                labelLayerId
+            );
         });
     }, []);
 
     // 🟥 Offensive drones
     useEffect(() => {
-        const objects = offData?.data?.objects || offData?.objects;
-        if (!objects || !mapRef.current) return;
+        if (!enabled) return;
+        const normalized = normalizeOffensiveData(offData);
+        const objects = normalized.objects;
+        if (!objects.length || !mapRef.current) return;
 
         objects.forEach((obj) => {
-            const { obj_id, lat, lng, size } = obj;
-            if (offMarkersRef.current[obj_id]) {
-                offMarkersRef.current[obj_id].setLngLat([lng, lat]);
+            const { id, droneId, lat, long, alt } = obj;
+            const markerId = id || droneId;
+            const latitude = Number(lat);
+            const longitude = Number(long);
+            const altitude = parseAltitude(alt);
+
+            if (!isValidCoordinate(latitude, longitude)) {
+                console.warn("⚠️ Invalid coordinates (Off):", obj);
+                return;
+            }
+
+            if (offMarkersRef.current[markerId]) {
+                offMarkersRef.current[markerId].setLngLat([
+                    longitude,
+                    latitude,
+                ]);
+                if (offMarkersRef.current[markerId].setAltitude)
+                    offMarkersRef.current[markerId].setAltitude(altitude);
             } else {
                 const el = document.createElement("div");
-                const sizePx =
-                    size === "large" ? 50 : size === "medium" ? 40 : 30;
+                const sizePx = 30 + (altitude ? Math.min(altitude / 5, 20) : 0);
                 el.style.width = `${sizePx}px`;
                 el.style.height = `${sizePx}px`;
                 el.style.background =
@@ -49,24 +152,53 @@ const MapCombined = ({ enabled = true }) => {
                 el.style.boxShadow = "0 0 12px rgba(248,113,113,0.6)";
                 el.style.cursor = "pointer";
 
-                const marker = new mapboxgl.Marker(el)
-                    .setLngLat([lng, lat])
+                const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(`
+                    <div>
+                        <strong>Offensive Drone</strong><br/>
+                        ID: ${droneId || markerId}<br/>
+                        Lat: ${latitude.toFixed(5)}<br/>
+                        Long: ${longitude.toFixed(5)}<br/>
+                        Altitude: ${altitude} m
+                    </div>
+                `);
+
+                const marker = new mapboxgl.Marker({
+                    element: el,
+                    altitude: altitude,
+                    occludedOpacity: 0.3,
+                })
+                    .setLngLat([longitude, latitude])
+                    .setPopup(popup)
                     .addTo(mapRef.current);
 
-                offMarkersRef.current[obj_id] = marker; // ✅ store Marker, not el
+                offMarkersRef.current[markerId] = marker;
             }
         });
-    }, [offData]);
+    }, [offData, enabled]);
 
     // 🟢 Defensive drones
     useEffect(() => {
+        if (!enabled) return;
         const objects = defData?.data?.objects || defData?.objects;
         if (!objects || !mapRef.current) return;
 
         objects.forEach((obj) => {
-            const { obj_id, lat, lng, size } = obj;
-            if (defMarkersRef.current[obj_id]) {
-                defMarkersRef.current[obj_id].setLngLat([lng, lat]);
+            const { obj_id, objId, lat, lng, long, size, alt } = obj;
+            const id = obj_id || objId;
+            const longitude = Number(lng ?? long);
+            const latitude = Number(lat);
+            const altitude = parseAltitude(alt);
+
+            // ป้องกัน NaN
+            if (!isValidCoordinate(latitude, longitude)) {
+                console.warn("⚠️ Invalid coordinates (Def):", obj);
+                return;
+            }
+
+            if (defMarkersRef.current[id]) {
+                defMarkersRef.current[id].setLngLat([longitude, latitude]);
+                if (defMarkersRef.current[id].setAltitude)
+                    defMarkersRef.current[id].setAltitude(altitude);
             } else {
                 const el = document.createElement("div");
                 const sizePx =
@@ -80,21 +212,41 @@ const MapCombined = ({ enabled = true }) => {
                 el.style.boxShadow = "0 0 12px rgba(34,197,94,0.6)";
                 el.style.cursor = "pointer";
 
-                const marker = new mapboxgl.Marker(el)
-                    .setLngLat([lng, lat])
+                const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(`
+                    <div>
+                        <strong>Defensive Drone</strong><br/>
+                        ID: ${id}<br/>
+                        Lat: ${latitude.toFixed(5)}<br/>
+                        Long: ${longitude.toFixed(5)}<br/>
+                        Altitude: ${altitude} m
+                    </div>
+                `);
+
+                const marker = new mapboxgl.Marker({
+                    element: el,
+                    altitude: altitude,
+                    occludedOpacity: 0.3,
+                })
+                    .setLngLat([longitude, latitude])
+                    .setPopup(popup)
                     .addTo(mapRef.current);
 
-                defMarkersRef.current[obj_id] = marker; // ✅ store Marker, not el
+                defMarkersRef.current[id] = marker;
             }
         });
-    }, [defData]);
+    }, [defData, enabled]);
 
     return (
         <div className="map-surface">
             <div ref={mapContainer} className="map-surface__canvas" />
+
             <div className="map-status">
-                <span className="h-2 w-2 rounded-full bg-gradient-to-r from-rose-400 to-emerald-300" />
-                Combined stream
+                <span
+                    className={`map-status__dot ${
+                        isConnected ? "bg-lime-300" : "bg-rose-400"
+                    }`}
+                />
+                Combined stream · {socketMode?.toUpperCase()} socket
             </div>
         </div>
     );

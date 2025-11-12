@@ -35,10 +35,10 @@ const Login = () => {
                 className="auth-card space-y-6"
             >
                 <div className="space-y-2 text-center">
-                    <p className="page-eyebrow">TESA Operations</p>
+                    <p className="page-eyebrow">TESA TEJAI</p>
                     <h1 className="page-title text-3xl">Sign in</h1>
                     <p className="text-slate-300 text-sm">
-                        Authenticate to enter the live mission dashboard.
+                        Authenticate to enter the dashboard.
                     </p>
                 </div>
 

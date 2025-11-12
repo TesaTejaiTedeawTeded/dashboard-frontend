@@ -147,11 +147,7 @@ const Mock = () => {
                 <p className="page-eyebrow">Mock control</p>
                 <div>
                     <h1 className="page-title">Camera credentials</h1>
-                    <p className="page-subtitle">
-                        Quickly inspect configured camera IDs and tokens for
-                        both pipelines. Reveal tokens temporarily with the
-                        shared reveal code.
-                    </p>
+                    <p className="page-subtitle">MYSNAXX มันฝรั่งทอดที่โคตรอร่อย</p>
                 </div>
             </header>
 
@@ -190,9 +186,7 @@ const Mock = () => {
                             <p className="page-eyebrow text-xs">
                                 Reveal authorization
                             </p>
-                            <h2 className="section-title">
-                                Enter reveal code
-                            </h2>
+                            <h2 className="section-title">Enter reveal code</h2>
                         </div>
                         {pwdError && (
                             <p className="text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-xl px-3 py-2 text-center">
@@ -208,7 +202,10 @@ const Mock = () => {
                             placeholder="••••"
                         />
                         <div className="flex flex-col gap-3 sm:flex-row">
-                            <button type="submit" className="glass-button flex-1">
+                            <button
+                                type="submit"
+                                className="glass-button flex-1"
+                            >
                                 Reveal token
                             </button>
                             <button
@@ -248,7 +245,6 @@ const ChannelPanel = ({
                         {theme.emoji} {data?.name || `${theme.label} camera`}
                     </h2>
                 </div>
-                <span className="badge badge--subtle">Calibrated</span>
             </div>
 
             <dl className="space-y-4">

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import MapOffensive from "./MapOffensive.jsx";
 import MapDefensive from "./MapDefensive.jsx";
@@ -10,16 +10,29 @@ const MAPS = [
     { id: "combined", label: "Combined Map", Component: MapCombined },
 ];
 
-const MapSlider = () => {
+const SOCKET_MODE_LABEL =
+    (import.meta.env.VITE_SOCKET_MODE || "mock").toUpperCase();
+
+const MapSlider = ({ expanded = false }) => {
     const [activeIndex, setActiveIndex] = useState(0);
 
-    const goNext = () => setActiveIndex((idx) => (idx + 1) % MAPS.length);
-    const goPrev = () =>
-        setActiveIndex((idx) => (idx - 1 + MAPS.length) % MAPS.length);
+    const goNext = useCallback(
+        () => setActiveIndex((idx) => (idx + 1) % MAPS.length),
+        []
+    );
+    const goPrev = useCallback(
+        () => setActiveIndex((idx) => (idx - 1 + MAPS.length) % MAPS.length),
+        []
+    );
 
     return (
-        <div className="map-slider">
-            <div className="map-slider__label">{MAPS[activeIndex].label}</div>
+        <div className={`map-slider ${expanded ? "map-slider--expanded" : ""}`}>
+            <div className="map-slider__label flex items-center justify-between gap-3">
+                <span>{MAPS[activeIndex].label}</span>
+                <span className="text-[10px] uppercase tracking-[0.4em] text-white/60">
+                    {SOCKET_MODE_LABEL} socket
+                </span>
+            </div>
 
             <button
                 type="button"
@@ -38,18 +51,21 @@ const MapSlider = () => {
             </button>
 
             <div className="w-full h-full relative overflow-hidden rounded-2xl border border-white/5">
-                {MAPS.map(({ id, Component }, idx) => (
-                    <div
-                        key={id}
-                        className={`map-slider__pane ${
-                            activeIndex === idx
-                                ? "opacity-100"
-                                : "opacity-0 pointer-events-none"
-                        }`}
-                    >
-                        <Component enabled={activeIndex === idx} />
-                    </div>
-                ))}
+                {MAPS.map((definition, idx) => {
+                    const Panel = definition.Component;
+                    return (
+                        <div
+                            key={definition.id}
+                            className={`map-slider__pane ${
+                                activeIndex === idx
+                                    ? "opacity-100"
+                                    : "opacity-0 pointer-events-none"
+                            }`}
+                        >
+                            <Panel enabled={activeIndex === idx} />
+                        </div>
+                    );
+                })}
             </div>
         </div>
     );
