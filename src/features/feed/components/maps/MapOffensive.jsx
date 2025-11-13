@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { useSocket } from "../../../../hooks/useSocket.js";
@@ -15,6 +15,23 @@ const parseAltitude = (value) => {
     return Number.isFinite(numeric) ? numeric : 0;
 };
 
+const formatCoord = (value) =>
+    Number.isFinite(value) ? value.toFixed(5) : "-";
+
+const formatAltitude = (value) =>
+    Number.isFinite(value) ? `${value} m` : "-";
+
+const formatTime = (value) =>
+    value ? new Date(value).toLocaleTimeString() : "-";
+
+const formatDetailTimestamp = (value) =>
+    value ? new Date(value).toLocaleString("th-TH") : "-";
+
+const PATH_TTL_MS =
+    Number(import.meta.env.VITE_OFFENSIVE_PATH_TTL_MS) || 3 * 60 * 1000;
+const PATH_MAX_POINTS =
+    Number(import.meta.env.VITE_OFFENSIVE_PATH_MAX_POINTS) || 500;
+
 const offensiveCameraConfig = createCameraConfig({
     mock: import.meta.env.VITE_OFF_CAM_ID,
     real: import.meta.env.VITE_OFF_CAM_ID_REAL,
@@ -24,6 +41,10 @@ const MapOffensive = ({ enabled = true }) => {
     const mapContainer = useRef(null);
     const mapRef = useRef(null);
     const markersRef = useRef({});
+    const pathsRef = useRef({});
+    const latestTelemetryRef = useRef({});
+    const [selectedDrone, setSelectedDrone] = useState(null);
+    const selectedDroneRef = useRef(null);
 
     const hasCamIds = hasCameraConfig(offensiveCameraConfig);
     const { realtimeData, isConnected, mode } = useSocket(
@@ -31,6 +52,59 @@ const MapOffensive = ({ enabled = true }) => {
         enabled && hasCamIds,
         { events: ["object_detection"] }
     );
+
+    useEffect(() => {
+        selectedDroneRef.current = selectedDrone;
+    }, [selectedDrone]);
+
+    useEffect(() => {
+        if (!enabled) {
+            setSelectedDrone(null);
+        }
+    }, [enabled]);
+
+    const updatePathSource = () => {
+        if (!mapRef.current) return;
+        const source = mapRef.current.getSource("offensive-paths");
+        if (!source || typeof source.setData !== "function") return;
+
+        const features = Object.entries(pathsRef.current)
+            .filter(([, data]) => data.coordinates.length > 1)
+            .map(([droneId, data]) => ({
+                type: "Feature",
+                properties: { droneId },
+                geometry: {
+                    type: "LineString",
+                    coordinates: data.coordinates,
+                },
+            }));
+
+        source.setData({
+            type: "FeatureCollection",
+            features,
+        });
+    };
+
+    const pruneStalePaths = (now = Date.now()) => {
+        let changed = false;
+        Object.entries(pathsRef.current).forEach(([droneId, data]) => {
+            if (now - data.lastUpdate > PATH_TTL_MS) {
+                delete pathsRef.current[droneId];
+                if (markersRef.current[droneId]) {
+                    markersRef.current[droneId].remove();
+                    delete markersRef.current[droneId];
+                }
+                delete latestTelemetryRef.current[droneId];
+                if (selectedDroneRef.current?.markerId === droneId) {
+                    setSelectedDrone(null);
+                }
+                changed = true;
+            }
+        });
+        if (changed) {
+            updatePathSource();
+        }
+    };
 
     // ✅ initialize map once (with 3D terrain + buildings)
     useEffect(() => {
@@ -83,6 +157,28 @@ const MapOffensive = ({ enabled = true }) => {
                 },
                 labelLayerId
             );
+
+            if (!map.getSource("offensive-paths")) {
+                map.addSource("offensive-paths", {
+                    type: "geojson",
+                    data: { type: "FeatureCollection", features: [] },
+                });
+            }
+
+            if (!map.getLayer("offensive-paths")) {
+                map.addLayer({
+                    id: "offensive-paths",
+                    type: "line",
+                    source: "offensive-paths",
+                    paint: {
+                        "line-color": "#fb7185",
+                        "line-width": 3,
+                        "line-opacity": 0.85,
+                    },
+                });
+            }
+
+            updatePathSource();
         });
     }, []);
 
@@ -102,6 +198,8 @@ const MapOffensive = ({ enabled = true }) => {
         console.log("🛰 Updating map with objects:", objects);
 
         // --- Create or update markers ---
+        const now = Date.now();
+
         objects.forEach((obj) => {
             const { id, droneId, lat, long, alt } = obj;
             const altitude = parseAltitude(alt);
@@ -111,6 +209,30 @@ const MapOffensive = ({ enabled = true }) => {
                 console.warn("⚠️ Skipping object with invalid coords:", obj);
                 return;
             }
+
+            const existingPath = pathsRef.current[markerId] || {
+                coordinates: [],
+                lastUpdate: 0,
+            };
+            if (!pathsRef.current[markerId]) {
+                pathsRef.current[markerId] = existingPath;
+            }
+            const coords = existingPath.coordinates.concat([[long, lat]]);
+            pathsRef.current[markerId] = {
+                coordinates:
+                    coords.length > PATH_MAX_POINTS
+                        ? coords.slice(coords.length - PATH_MAX_POINTS)
+                        : coords,
+                lastUpdate: now,
+            };
+            latestTelemetryRef.current[markerId] = {
+                markerId,
+                droneId: droneId || markerId,
+                altitude,
+                lat,
+                long,
+                lastPing: obj.timestamp || timestamp,
+            };
 
             if (markersRef.current[markerId]) {
                 // อัปเดตตำแหน่งและความสูง
@@ -131,18 +253,26 @@ const MapOffensive = ({ enabled = true }) => {
                 el.style.border = "1px solid rgba(255,255,255,0.7)";
                 el.style.boxShadow = "0 0 12px rgba(248,113,113,0.6)";
 
-                const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(`
-                    <div>
-                        <strong>Offensive drone</strong><br/>
-                        ID: ${droneId || markerId}<br/>
-                        Altitude: ${altitude} m<br/>
-                        Lat: ${lat.toFixed(5)}<br/>
-                        Long: ${long.toFixed(5)}<br/>
-                        Time: ${new Date(
-                            obj.timestamp || timestamp
-                        ).toLocaleTimeString()}
-                    </div>
-                `);
+                const handleMarkerClick = (event) => {
+                    event?.stopPropagation();
+                    const latest =
+                        latestTelemetryRef.current[markerId] || {};
+                    setSelectedDrone({
+                        markerId,
+                        droneId: latest.droneId || droneId || markerId,
+                        altitude:
+                            latest.altitude !== undefined
+                                ? latest.altitude
+                                : altitude,
+                        lat: latest.lat ?? lat,
+                        long: latest.long ?? long,
+                        lastPing: latest.lastPing || obj.timestamp || timestamp,
+                        trackPoints:
+                            pathsRef.current[markerId]?.coordinates?.length ||
+                            coords.length,
+                    });
+                };
+                el.addEventListener("click", handleMarkerClick);
 
                 const marker = new mapboxgl.Marker({
                     element: el,
@@ -150,12 +280,48 @@ const MapOffensive = ({ enabled = true }) => {
                     occludedOpacity: 0.3, // จางลงถ้าอยู่หลังภูเขา
                 })
                     .setLngLat([long, lat])
-                    .setPopup(popup)
                     .addTo(mapRef.current);
 
                 markersRef.current[markerId] = marker;
             }
         });
+
+        const selection = selectedDroneRef.current;
+        if (selection) {
+            const latest = objects.find((obj) => {
+                const key = obj.id || obj.droneId;
+                return key && key === selection.markerId;
+            });
+            if (latest) {
+                const latestAltitude = parseAltitude(latest.alt);
+                const updatedPayload = {
+                    markerId: selection.markerId,
+                    droneId: latest.droneId || selection.droneId,
+                    altitude: latestAltitude,
+                    lat: latest.lat,
+                    long: latest.long,
+                    lastPing: latest.timestamp || timestamp,
+                    trackPoints:
+                        pathsRef.current[selection.markerId]?.coordinates
+                            ?.length || selection.trackPoints,
+                };
+                const changed =
+                    updatedPayload.altitude !== selection.altitude ||
+                    updatedPayload.lat !== selection.lat ||
+                    updatedPayload.long !== selection.long ||
+                    updatedPayload.lastPing !== selection.lastPing ||
+                    updatedPayload.trackPoints !== selection.trackPoints;
+                if (changed) {
+                    setSelectedDrone((prev) =>
+                        prev?.markerId === updatedPayload.markerId
+                            ? updatedPayload
+                            : prev
+                    );
+                }
+            }
+        }
+
+        updatePathSource();
 
         // --- Auto-center & zoom ---
         const coords = objects.filter(
@@ -179,21 +345,83 @@ const MapOffensive = ({ enabled = true }) => {
         }
     }, [realtimeData, enabled]);
 
-    return (
-        <div className="map-surface">
-            <div ref={mapContainer} className="map-surface__canvas" />
+    useEffect(() => {
+        if (!enabled) return;
+        const interval = setInterval(() => {
+            pruneStalePaths();
+        }, Math.min(PATH_TTL_MS / 2, 30000));
+        return () => clearInterval(interval);
+    }, [enabled]);
 
-            <div className="map-status">
-                <span
-                    className={`map-status__dot ${
-                        isConnected ? "bg-lime-300" : "bg-rose-400"
-                    }`}
-                />
-                {isConnected ? "Connected" : "Disconnected"} ·{" "}
-                {mode?.toUpperCase()} socket
+    return (
+        <div className="map-with-detail">
+            <div className="map-with-detail__map">
+                <div className="map-surface">
+                    <div ref={mapContainer} className="map-surface__canvas" />
+
+                    <div className="map-status">
+                        <span
+                            className={`map-status__dot ${
+                                isConnected ? "bg-lime-300" : "bg-rose-400"
+                            }`}
+                        />
+                        {isConnected ? "Connected" : "Disconnected"} ·{" "}
+                        {mode?.toUpperCase()} socket
+                    </div>
+                </div>
             </div>
+            {selectedDrone && (
+                <DroneDetailPanel
+                    data={selectedDrone}
+                    onClose={() => setSelectedDrone(null)}
+                />
+            )}
         </div>
     );
 };
+
+const DroneDetailPanel = ({ data, onClose }) => (
+    <div className="map-with-detail__detail">
+        <div className="flex items-start justify-between gap-3">
+            <div>
+                <p className="text-[11px] uppercase tracking-[0.4em] text-rose-200/80">
+                    Offensive Drone
+                </p>
+                <h3 className="text-xl font-semibold text-slate-50">
+                    {data.droneId || data.markerId}
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                    {data.trackPoints || 0} track points · Last ping{" "}
+                    {formatDetailTimestamp(data.lastPing)}
+                </p>
+            </div>
+            <button
+                type="button"
+                onClick={onClose}
+                className="glass-button glass-button--ghost text-xs px-3 py-1"
+            >
+                Close
+            </button>
+        </div>
+        <div className="grid grid-cols-2 gap-4 text-sm text-slate-100">
+            <DetailStat label="Latitude" value={formatCoord(data.lat)} />
+            <DetailStat label="Longitude" value={formatCoord(data.long)} />
+            <DetailStat label="Altitude" value={formatAltitude(data.altitude)} />
+            <DetailStat label="Local time" value={formatTime(data.lastPing)} />
+        </div>
+        <div className="text-xs uppercase tracking-[0.35em] text-slate-500">
+            Click another drone marker to update this panel.
+        </div>
+    </div>
+);
+
+const DetailStat = ({ label, value }) => (
+    <div className="space-y-1">
+        <p className="text-[10px] uppercase tracking-[0.35em] text-slate-500">
+            {label}
+        </p>
+        <p className="text-base font-semibold text-slate-50">{value}</p>
+    </div>
+);
 
 export default MapOffensive;

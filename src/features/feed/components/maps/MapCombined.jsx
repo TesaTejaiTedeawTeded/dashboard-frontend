@@ -7,6 +7,7 @@ import {
     hasCameraConfig,
 } from "../../../../utils/cameraConfig.js";
 import { normalizeOffensiveData } from "../../../../utils/normalizeOffensiveData.js";
+import { buildPopupContent } from "./popupTemplate.js";
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
@@ -15,6 +16,12 @@ const parseAltitude = (value) => {
     const numeric = Number(value);
     return Number.isFinite(numeric) ? numeric : 0;
 };
+
+const formatCoord = (value) =>
+    Number.isFinite(value) ? value.toFixed(5) : "-";
+
+const formatAltitude = (value) =>
+    Number.isFinite(value) ? `${value} m` : "-";
 
 // ✅ Helper: ตรวจพิกัดว่าถูกต้องหรือไม่
 const isValidCoordinate = (lat, lng) =>
@@ -152,15 +159,20 @@ const MapCombined = ({ enabled = true }) => {
                 el.style.boxShadow = "0 0 12px rgba(248,113,113,0.6)";
                 el.style.cursor = "pointer";
 
-                const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(`
-                    <div>
-                        <strong>Offensive Drone</strong><br/>
-                        ID: ${droneId || markerId}<br/>
-                        Lat: ${latitude.toFixed(5)}<br/>
-                        Long: ${longitude.toFixed(5)}<br/>
-                        Altitude: ${altitude} m
-                    </div>
-                `);
+                const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(
+                    buildPopupContent({
+                        title: "Offensive Drone",
+                        accent: "#fb7185",
+                        rows: [
+                            { label: "ID", value: droneId || markerId },
+                            { label: "Altitude", value: formatAltitude(altitude) },
+                            { label: "Lat", value: formatCoord(latitude) },
+                            { label: "Long", value: formatCoord(longitude) },
+                        ],
+                        metaLabel: "Ping",
+                        metaValue: new Date(obj.timestamp || Date.now()).toLocaleTimeString(),
+                    })
+                );
 
                 const marker = new mapboxgl.Marker({
                     element: el,
@@ -212,15 +224,21 @@ const MapCombined = ({ enabled = true }) => {
                 el.style.boxShadow = "0 0 12px rgba(34,197,94,0.6)";
                 el.style.cursor = "pointer";
 
-                const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(`
-                    <div>
-                        <strong>Defensive Drone</strong><br/>
-                        ID: ${id}<br/>
-                        Lat: ${latitude.toFixed(5)}<br/>
-                        Long: ${longitude.toFixed(5)}<br/>
-                        Altitude: ${altitude} m
-                    </div>
-                `);
+                const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(
+                    buildPopupContent({
+                        title: "Defensive Drone",
+                        accent: "#34d399",
+                        rows: [
+                            { label: "ID", value: id },
+                            { label: "Altitude", value: formatAltitude(altitude) },
+                            { label: "Lat", value: formatCoord(latitude) },
+                            { label: "Long", value: formatCoord(longitude) },
+                            size ? { label: "Size", value: size } : null,
+                        ].filter(Boolean),
+                        metaLabel: "Channel",
+                        metaValue: "Defense",
+                    })
+                );
 
                 const marker = new mapboxgl.Marker({
                     element: el,
@@ -237,16 +255,20 @@ const MapCombined = ({ enabled = true }) => {
     }, [defData, enabled]);
 
     return (
-        <div className="map-surface">
-            <div ref={mapContainer} className="map-surface__canvas" />
+        <div className="map-with-detail">
+            <div className="map-with-detail__map">
+                <div className="map-surface">
+                    <div ref={mapContainer} className="map-surface__canvas" />
 
-            <div className="map-status">
-                <span
-                    className={`map-status__dot ${
-                        isConnected ? "bg-lime-300" : "bg-rose-400"
-                    }`}
-                />
-                Combined stream · {socketMode?.toUpperCase()} socket
+                    <div className="map-status">
+                        <span
+                            className={`map-status__dot ${
+                                isConnected ? "bg-lime-300" : "bg-rose-400"
+                            }`}
+                        />
+                        Combined stream · {socketMode?.toUpperCase()} socket
+                    </div>
+                </div>
             </div>
         </div>
     );

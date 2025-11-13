@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { useSocket } from "../../../../hooks/useSocket.js";
@@ -15,6 +15,17 @@ const parseAltitude = (value) => {
     return Number.isFinite(numeric) ? numeric : 0;
 };
 
+const formatCoord = (value) =>
+    Number.isFinite(value) ? value.toFixed(5) : "-";
+
+const formatAltitude = (value) => (Number.isFinite(value) ? `${value} m` : "-");
+
+const formatTime = (value) =>
+    value ? new Date(value).toLocaleTimeString() : "-";
+
+const formatDetailTimestamp = (value) =>
+    value ? new Date(value).toLocaleString("th-TH") : "-";
+
 const defensiveCameraConfig = createCameraConfig({
     mock: import.meta.env.VITE_DEF_CAM_ID,
     real: import.meta.env.VITE_DEF_CAM_ID_REAL,
@@ -24,6 +35,9 @@ const MapDefensive = ({ enabled = true }) => {
     const mapContainer = useRef(null);
     const mapRef = useRef(null);
     const markersRef = useRef({});
+    const telemetryRef = useRef({});
+    const [selectedObject, setSelectedObject] = useState(null);
+    const selectedObjectRef = useRef(null);
 
     const hasCamIds = hasCameraConfig(defensiveCameraConfig);
     const { realtimeData, isConnected, mode } = useSocket(
@@ -31,6 +45,16 @@ const MapDefensive = ({ enabled = true }) => {
         enabled && hasCamIds,
         { events: ["defensive_alert", "object_detection"] }
     );
+
+    useEffect(() => {
+        selectedObjectRef.current = selectedObject;
+    }, [selectedObject]);
+
+    useEffect(() => {
+        if (!enabled) {
+            setSelectedObject(null);
+        }
+    }, [enabled]);
 
     // ✅ สร้างแผนที่พร้อม 3D Terrain + Buildings
     useEffect(() => {
@@ -94,9 +118,26 @@ const MapDefensive = ({ enabled = true }) => {
         const objects = normalized.objects;
         if (!objects.length) return;
 
+        const timestamp = normalized.timestamp;
+        const cameraLabel =
+            realtimeData?.cameraId ||
+            realtimeData?.camera?.id ||
+            realtimeData?.data?.camera?.id ||
+            "Defense net";
+
         objects.forEach((obj) => {
             const { objId, lat, long, alt } = obj;
             const altitude = parseAltitude(alt);
+            telemetryRef.current[objId] = {
+                objId,
+                lat,
+                long,
+                altitude,
+                timestamp,
+                cameraLabel,
+                image: normalized.imagePath,
+                imageCandidates: normalized.imageCandidates,
+            };
 
             if (markersRef.current[objId]) {
                 markersRef.current[objId].setLngLat([long, lat]);
@@ -116,15 +157,16 @@ const MapDefensive = ({ enabled = true }) => {
                 el.style.boxShadow = "0 0 12px rgba(16,185,129,0.5)";
                 el.style.cursor = "pointer";
 
-                const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(`
-                    <div>
-                        <strong>Drone</strong><br/>
-                        ID: ${objId}<br/>
-                        Lat: ${lat.toFixed(5)}<br/>
-                        Long: ${long.toFixed(5)}<br/>
-                        Altitude: ${altitude} m
-                    </div>
-                `);
+                const handleClick = (event) => {
+                    event?.stopPropagation();
+                    const latest = telemetryRef.current[objId];
+                    if (latest) {
+                        setSelectedObject({
+                            ...latest,
+                        });
+                    }
+                };
+                el.addEventListener("click", handleClick);
 
                 const marker = new mapboxgl.Marker({
                     element: el,
@@ -132,12 +174,27 @@ const MapDefensive = ({ enabled = true }) => {
                     occludedOpacity: 0.3, // จางลงถ้าถูก terrain บัง
                 })
                     .setLngLat([long, lat])
-                    .setPopup(popup)
                     .addTo(mapRef.current);
 
                 markersRef.current[objId] = marker;
             }
         });
+
+        const selection = selectedObjectRef.current;
+        if (selection) {
+            const updated = telemetryRef.current[selection.objId];
+            if (updated) {
+                const changed =
+                    updated.lat !== selection.lat ||
+                    updated.long !== selection.long ||
+                    updated.altitude !== selection.altitude ||
+                    updated.timestamp !== selection.timestamp ||
+                    updated.image !== selection.image;
+                if (changed) {
+                    setSelectedObject(updated);
+                }
+            }
+        }
 
         // --- Auto-center ---
         const avgLat =
@@ -156,18 +213,109 @@ const MapDefensive = ({ enabled = true }) => {
     }, [realtimeData, enabled]);
 
     return (
-        <div className="map-surface">
-            <div ref={mapContainer} className="map-surface__canvas" />
+        <div className="map-with-detail">
+            <div className="map-with-detail__map">
+                <div className="map-surface">
+                    <div ref={mapContainer} className="map-surface__canvas" />
 
-            <div className="map-status">
-                <span
-                    className={`map-status__dot ${
-                        isConnected ? "bg-lime-300" : "bg-rose-400"
-                    }`}
-                />
-                {isConnected ? "Connected" : "Disconnected"} ·{" "}
-                {mode?.toUpperCase()} socket
+                    <div className="map-status">
+                        <span
+                            className={`map-status__dot ${
+                                isConnected ? "bg-lime-300" : "bg-rose-400"
+                            }`}
+                        />
+                        {isConnected ? "Connected" : "Disconnected"} ·{" "}
+                        {mode?.toUpperCase()} socket
+                    </div>
+                </div>
             </div>
+            {selectedObject && (
+                <DefensiveDetailPanel
+                    data={selectedObject}
+                    onClose={() => setSelectedObject(null)}
+                />
+            )}
+        </div>
+    );
+};
+
+const DefensiveDetailPanel = ({ data, onClose }) => (
+    <div className="map-with-detail__detail">
+        <DetailImage
+            candidates={data.imageCandidates}
+            alt={`Defensive snapshot ${data.objId}`}
+        />
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div>
+                <p className="text-[11px] uppercase tracking-[0.35em] text-emerald-200/80">
+                    Defensive Detection
+                </p>
+                <h3 className="text-xl font-semibold text-slate-50">
+                    {data.objId}
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                    {data.cameraLabel || "Defense net"} · Last ping{" "}
+                    {formatDetailTimestamp(data.timestamp)}
+                </p>
+            </div>
+            <button
+                type="button"
+                onClick={onClose}
+                className="glass-button glass-button--ghost text-xs px-3 py-1"
+            >
+                Close
+            </button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 text-sm text-slate-100">
+            <DetailStat label="Latitude" value={formatCoord(data.lat)} />
+            <DetailStat label="Longitude" value={formatCoord(data.long)} />
+            <DetailStat
+                label="Altitude"
+                value={formatAltitude(data.altitude)}
+            />
+            <DetailStat label="Local time" value={formatTime(data.timestamp)} />
+        </div>
+    </div>
+);
+
+const DetailStat = ({ label, value }) => (
+    <div className="space-y-1">
+        <p className="text-[10px] uppercase tracking-[0.35em] text-slate-500">
+            {label}
+        </p>
+        <p className="text-base font-semibold text-slate-50">{value}</p>
+    </div>
+);
+
+const DetailImage = ({ candidates = [], alt }) => {
+    const [index, setIndex] = useState(0);
+    const [hidden, setHidden] = useState(false);
+
+    useEffect(() => {
+        setIndex(0);
+        setHidden(false);
+    }, [candidates]);
+
+    if (!candidates?.length || hidden) {
+        return (
+            <div className="map-with-detail__media map-with-detail__media--empty">
+                No snapshot available
+            </div>
+        );
+    }
+
+    const handleError = () => {
+        setIndex((prev) => {
+            if (prev + 1 < candidates.length) return prev + 1;
+            setHidden(true);
+            return prev;
+        });
+    };
+
+    return (
+        <div className="map-with-detail__media">
+            <img src={candidates[index]} alt={alt} onError={handleError} />
         </div>
     );
 };

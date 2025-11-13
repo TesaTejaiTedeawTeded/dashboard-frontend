@@ -36,3 +36,22 @@ export const fetchDefensiveCameras = async () => {
     const { data } = await apiClient.get("/api/alerts/cameras");
     return data;
 };
+
+export const fetchOffensiveHistory = async (
+    startDate,
+    endDate,
+    droneId,
+    limit
+) => {
+    const query = buildRangeParams(startDate, endDate, {
+        droneId,
+        limit,
+    });
+    const { data } = await apiClient.get(`/api/offensive?${query}`);
+    return data;
+};
+
+export const fetchOffensiveDrones = async () => {
+    const { data } = await apiClient.get("/api/offensive/drones");
+    return data;
+};
