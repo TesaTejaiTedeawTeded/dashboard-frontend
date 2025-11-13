@@ -18,8 +18,7 @@ const parseAltitude = (value) => {
 const formatCoord = (value) =>
     Number.isFinite(value) ? value.toFixed(5) : "-";
 
-const formatAltitude = (value) =>
-    Number.isFinite(value) ? `${value} m` : "-";
+const formatAltitude = (value) => (Number.isFinite(value) ? `${value} m` : "-");
 
 const formatTime = (value) =>
     value ? new Date(value).toLocaleTimeString() : "-";
@@ -177,9 +176,10 @@ const MapOffensive = ({ enabled = true }) => {
                     },
                 });
             }
-
             updatePathSource();
         });
+
+        return () => {};
     }, []);
 
     // ✅ update markers & auto-center
@@ -255,8 +255,7 @@ const MapOffensive = ({ enabled = true }) => {
 
                 const handleMarkerClick = (event) => {
                     event?.stopPropagation();
-                    const latest =
-                        latestTelemetryRef.current[markerId] || {};
+                    const latest = latestTelemetryRef.current[markerId] || {};
                     setSelectedDrone({
                         markerId,
                         droneId: latest.droneId || droneId || markerId,
@@ -337,7 +336,7 @@ const MapOffensive = ({ enabled = true }) => {
             mapRef.current.flyTo({
                 center: [avgLng, avgLat],
                 zoom: 15,
-                pitch: 60, // คงมุมมอง 3D
+                pitch: 60,
                 bearing: -20,
                 speed: 0.8,
                 essential: true,
@@ -406,7 +405,10 @@ const DroneDetailPanel = ({ data, onClose }) => (
         <div className="grid grid-cols-2 gap-4 text-sm text-slate-100">
             <DetailStat label="Latitude" value={formatCoord(data.lat)} />
             <DetailStat label="Longitude" value={formatCoord(data.long)} />
-            <DetailStat label="Altitude" value={formatAltitude(data.altitude)} />
+            <DetailStat
+                label="Altitude"
+                value={formatAltitude(data.altitude)}
+            />
             <DetailStat label="Local time" value={formatTime(data.lastPing)} />
         </div>
         <div className="text-xs uppercase tracking-[0.35em] text-slate-500">

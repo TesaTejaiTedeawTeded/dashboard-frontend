@@ -109,6 +109,7 @@ const MapDefensive = ({ enabled = true }) => {
                 labelLayerId
             );
         });
+        return () => {};
     }, []);
 
     // ✅ อัปเดต marker ตาม realtimeData

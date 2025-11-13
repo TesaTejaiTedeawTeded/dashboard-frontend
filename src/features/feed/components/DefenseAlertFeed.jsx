@@ -76,6 +76,7 @@ const DefenseAlertFeed = () => {
                         candidates={selectedAlert.imageCandidates}
                         alt="Detected Drone"
                         className="rounded-2xl border border-white/10 object-cover w-full max-h-[40vh]"
+                        enableLightbox
                     />
                 ) : (
                     <div className="rounded-2xl border border-dashed border-white/10 bg-slate-900/40 text-center text-sm text-slate-400 py-8">
@@ -190,13 +191,20 @@ const DefenseAlertFeed = () => {
 
 export default DefenseAlertFeed;
 
-const ImageWithFallback = ({ candidates = [], alt, className }) => {
+const ImageWithFallback = ({
+    candidates = [],
+    alt,
+    className = "",
+    enableLightbox = false,
+}) => {
     const [index, setIndex] = useState(0);
     const [hidden, setHidden] = useState(false);
+    const [lightboxOpen, setLightboxOpen] = useState(false);
 
     useEffect(() => {
         setIndex(0);
         setHidden(false);
+        setLightboxOpen(false);
     }, [candidates]);
 
     if (!candidates.length || hidden) return null;
@@ -211,12 +219,53 @@ const ImageWithFallback = ({ candidates = [], alt, className }) => {
         });
     };
 
-    return (
+    const handleOpen = () => {
+        if (!enableLightbox) return;
+        setLightboxOpen(true);
+    };
+
+    const handleClose = () => setLightboxOpen(false);
+
+    const imageElement = (
         <img
             src={candidates[index]}
             alt={alt}
             className={className}
             onError={handleError}
         />
+    );
+
+    return (
+        <>
+            {enableLightbox ? (
+                <button
+                    type="button"
+                    className="image-lightbox__trigger"
+                    onClick={handleOpen}
+                >
+                    {imageElement}
+                </button>
+            ) : (
+                imageElement
+            )}
+            {enableLightbox && lightboxOpen && (
+                <div className="image-lightbox" onClick={handleClose}>
+                    <button
+                        type="button"
+                        className="image-lightbox__close"
+                        onClick={handleClose}
+                    >
+                        Close
+                    </button>
+                    <img
+                        src={candidates[index]}
+                        alt={alt}
+                        className="image-lightbox__img"
+                        onClick={(event) => event.stopPropagation()}
+                        onError={handleError}
+                    />
+                </div>
+            )}
+        </>
     );
 };

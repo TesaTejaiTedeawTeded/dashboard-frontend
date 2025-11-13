@@ -154,6 +154,12 @@ export const useSocket = (camId, enabled = true, options = {}) => {
 
         // If component specifies explicit camId, include that too
         const subscribeIds = [...new Set([...baseCamIds, ...allIds])];
+        const allowedCamSet = new Set(
+            subscribeIds
+                .filter((value) => value !== undefined && value !== null)
+                .map((value) => String(value).toLowerCase())
+        );
+        const shouldFilterByCam = allowedCamSet.size > 0;
 
         console.log(
             `🎯 Subscribing cameras [${socketMode.toUpperCase()}]:`,
@@ -165,8 +171,26 @@ export const useSocket = (camId, enabled = true, options = {}) => {
 
         socketRef.current = socket;
 
+        const resolvePayloadCamId = (payload) =>
+            payload?.cam_id ||
+            payload?.camId ||
+            payload?.cameraId ||
+            payload?.camera?.id ||
+            payload?.camera?.cam_id ||
+            null;
+
         const handleDetection = (payload) => {
             if (!payload) return;
+
+            if (shouldFilterByCam) {
+                const candidate = resolvePayloadCamId(payload);
+                const normalized = candidate
+                    ? String(candidate).toLowerCase()
+                    : "";
+                if (!allowedCamSet.has(normalized)) {
+                    return;
+                }
+            }
             setRealtimeData(payload);
         };
 

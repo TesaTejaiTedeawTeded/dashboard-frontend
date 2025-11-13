@@ -15,16 +15,7 @@ const HISTORY_TABS = [
     { id: "offensive", label: "Offensive" },
 ];
 
-const DRONE_COLORS = [
-    "#f97316",
-    "#facc15",
-    "#34d399",
-    "#38bdf8",
-    "#a78bfa",
-    "#f472b6",
-    "#fb7185",
-    "#14b8a6",
-];
+const DRONE_COLORS = [];
 
 const defaultStartDate = () => {
     const now = new Date();
@@ -70,26 +61,6 @@ const History = () => {
             drones: unique.size,
         };
     }, [offEntries]);
-
-    const droneColorMap = useMemo(() => {
-        const map = {};
-        offDroneOptions.forEach((drone, index) => {
-            map[drone.droneId] = DRONE_COLORS[index % DRONE_COLORS.length];
-        });
-        return map;
-    }, [offDroneOptions]);
-
-    const hashString = (value = "") =>
-        value
-            .split("")
-            .reduce((hash, char) => (hash * 31 + char.charCodeAt(0)) >>> 0, 0);
-
-    const getDroneColor = (droneId) => {
-        if (!droneId) return "#94a3b8";
-        if (droneColorMap[droneId]) return droneColorMap[droneId];
-        const hash = hashString(droneId);
-        return DRONE_COLORS[hash % DRONE_COLORS.length];
-    };
 
     const loadDefensiveHistory = async () => {
         setDefLoading(true);
@@ -222,7 +193,7 @@ const History = () => {
                 </p>
             </header>
 
-            <div className="flex gap-3 mb-6">
+            <div className="flex gap-3">
                 {HISTORY_TABS.map((tab) => (
                     <button
                         key={tab.id}
@@ -274,7 +245,6 @@ const History = () => {
                     onSelectEntry={(entry) =>
                         setSelectedEntry({ type: "offensive", data: entry })
                     }
-                    getDroneColor={getDroneColor}
                 />
             )}
 
@@ -282,7 +252,6 @@ const History = () => {
                 <HistoryModal
                     entry={selectedEntry}
                     onClose={() => setSelectedEntry(null)}
-                    getDroneColor={getDroneColor}
                 />
             )}
         </div>
@@ -359,7 +328,6 @@ const OffensiveSection = ({
     droneOptions,
     droneError,
     onSelectEntry,
-    getDroneColor,
 }) => (
     <GlassPanel className="p-6 space-y-6">
         <DateRangePicker
@@ -388,32 +356,8 @@ const OffensiveSection = ({
                     ))}
                 </select>
             </label>
-            {droneError && (
-                <p className="text-sm text-red-300">{droneError}</p>
-            )}
+            {droneError && <p className="text-sm text-red-300">{droneError}</p>}
         </div>
-
-        {droneOptions.length > 0 && (
-            <div className="flex flex-wrap gap-2 text-[11px] uppercase tracking-[0.35em] text-slate-400">
-                {droneOptions.map((drone) => (
-                    <span
-                        key={drone.droneId}
-                        className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/10"
-                        style={{
-                            borderColor: `${getDroneColor(drone.droneId)}40`,
-                        }}
-                    >
-                        <span
-                            className="h-2.5 w-2.5 rounded-full border border-white/20"
-                            style={{
-                                backgroundColor: getDroneColor(drone.droneId),
-                            }}
-                        />
-                        {drone.droneId} · {drone.count}
-                    </span>
-                ))}
-            </div>
-        )}
 
         <HistoryList
             entries={entries}
@@ -421,7 +365,7 @@ const OffensiveSection = ({
             emptyText="Select a range to view offensive path breadcrumbs."
             onSelectEntry={onSelectEntry}
             renderRow={(entry) => (
-                <OffensiveRow entry={entry} getDroneColor={getDroneColor} />
+                <OffensiveRow entry={entry} />
             )}
         />
     </GlassPanel>
@@ -477,13 +421,9 @@ const HistoryList = ({
     </div>
 );
 
-const OffensiveRow = ({ entry, getDroneColor }) => (
+const OffensiveRow = ({ entry }) => (
     <>
         <div className="flex items-center gap-3">
-            <span
-                className="h-3 w-3 rounded-full border border-white/20"
-                style={{ backgroundColor: getDroneColor(entry.droneId) }}
-            />
             <div>
                 <p className="text-xs uppercase tracking-[0.35em] text-slate-400">
                     {entry.topic}
@@ -500,19 +440,13 @@ const OffensiveRow = ({ entry, getDroneColor }) => (
     </>
 );
 
-const HistoryModal = ({ entry, onClose, getDroneColor }) => {
+const HistoryModal = ({ entry, onClose }) => {
     if (!entry) return null;
     if (entry.type === "defensive") {
-        return (
-            <DefensiveDetail entry={entry.data} onClose={onClose} />
-        );
+        return <DefensiveDetail entry={entry.data} onClose={onClose} />;
     }
     return (
-        <OffensiveDetail
-            entry={entry.data}
-            onClose={onClose}
-            getDroneColor={getDroneColor}
-        />
+        <OffensiveDetail entry={entry.data} onClose={onClose} />
     );
 };
 
@@ -536,6 +470,7 @@ const DefensiveDetail = ({ entry, onClose }) => (
                     candidates={entry.imageCandidates}
                     alt="Historical snapshot"
                     className="rounded-2xl border border-white/10 object-cover w-full max-h-[40vh]"
+                    enableLightbox
                 />
             ) : (
                 <div className="rounded-2xl border border-dashed border-white/10 bg-slate-900/40 text-center text-sm text-slate-400 py-8">
@@ -585,7 +520,7 @@ const DefensiveDetail = ({ entry, onClose }) => (
     </div>
 );
 
-const OffensiveDetail = ({ entry, onClose, getDroneColor }) => {
+const OffensiveDetail = ({ entry, onClose }) => {
     const objects = entry.normalized?.objects || [];
     return (
         <div className="modal-overlay">
@@ -601,16 +536,6 @@ const OffensiveDetail = ({ entry, onClose, getDroneColor }) => {
                     </h2>
                     <p className="text-xs uppercase tracking-[0.35em] text-slate-400">
                         {formatTimestamp(entry.timestamp)}
-                    </p>
-                </div>
-
-                <div className="flex items-center gap-3">
-                    <span
-                        className="h-4 w-4 rounded-full border border-white/20"
-                        style={{ backgroundColor: getDroneColor(entry.droneId) }}
-                    />
-                    <p className="text-sm text-slate-200 font-semibold">
-                        {entry.droneId}
                     </p>
                 </div>
 
@@ -663,13 +588,20 @@ const OffensiveDetail = ({ entry, onClose, getDroneColor }) => {
     );
 };
 
-const ImageWithFallback = ({ candidates = [], alt, className }) => {
+const ImageWithFallback = ({
+    candidates = [],
+    alt,
+    className = "",
+    enableLightbox = false,
+}) => {
     const [index, setIndex] = useState(0);
     const [hidden, setHidden] = useState(false);
+    const [lightboxOpen, setLightboxOpen] = useState(false);
 
     useEffect(() => {
         setIndex(0);
         setHidden(false);
+        setLightboxOpen(false);
     }, [candidates]);
 
     if (!candidates.length || hidden) return null;
@@ -682,13 +614,54 @@ const ImageWithFallback = ({ candidates = [], alt, className }) => {
         });
     };
 
-    return (
+    const handleOpen = () => {
+        if (!enableLightbox) return;
+        setLightboxOpen(true);
+    };
+
+    const handleClose = () => setLightboxOpen(false);
+
+    const imageElement = (
         <img
             src={candidates[index]}
             alt={alt}
             className={className}
             onError={handleError}
         />
+    );
+
+    return (
+        <>
+            {enableLightbox ? (
+                <button
+                    type="button"
+                    className="image-lightbox__trigger"
+                    onClick={handleOpen}
+                >
+                    {imageElement}
+                </button>
+            ) : (
+                imageElement
+            )}
+            {enableLightbox && lightboxOpen && (
+                <div className="image-lightbox" onClick={handleClose}>
+                    <button
+                        type="button"
+                        className="image-lightbox__close"
+                        onClick={handleClose}
+                    >
+                        Close
+                    </button>
+                    <img
+                        src={candidates[index]}
+                        alt={alt}
+                        className="image-lightbox__img"
+                        onClick={(event) => event.stopPropagation()}
+                        onError={handleError}
+                    />
+                </div>
+            )}
+        </>
     );
 };
 
@@ -721,7 +694,8 @@ const enhanceDefensiveRecord = (record) => {
     return {
         id: record._id || `${cameraId}-${record.timestamp}`,
         topic: "Defensive alert",
-        timestamp: normalized?.timestamp || record.timestamp || record.createdAt,
+        timestamp:
+            normalized?.timestamp || record.timestamp || record.createdAt,
         cameraLabel: cameraId,
         summary,
         normalized,
