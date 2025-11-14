@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { Drone, Shield } from "lucide-react";
@@ -28,6 +28,38 @@ const formatAltitude = (value) =>
 const isValidCoordinate = (lat, lng) =>
     Number.isFinite(lat) && Number.isFinite(lng);
 
+const toTimestampMs = (value) => {
+    if (!value) return 0;
+    const date = new Date(value);
+    const ms = date.getTime();
+    return Number.isFinite(ms) ? ms : 0;
+};
+
+const formatTimestampLabel = (value) => {
+    if (!value) return "Pending ping";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "Pending ping";
+    return date.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+    });
+};
+
+const DRONE_CHANNEL_META = {
+    offensive: {
+        label: "Offensive",
+        badgeClass: "text-rose-200 border border-rose-400/20 bg-rose-500/10",
+        Icon: Drone,
+    },
+    defensive: {
+        label: "Defensive",
+        badgeClass:
+            "text-emerald-200 border border-emerald-400/20 bg-emerald-500/10",
+        Icon: Shield,
+    },
+};
+
 const offensiveCameraConfig = createCameraConfig({
     mock: import.meta.env.VITE_OFF_CAM_ID,
     real: import.meta.env.VITE_OFF_CAM_ID_REAL,
@@ -43,6 +75,9 @@ const MapCombined = ({ enabled = true }) => {
     const mapRef = useRef(null);
     const offMarkersRef = useRef({});
     const defMarkersRef = useRef({});
+    const [offTelemetry, setOffTelemetry] = useState([]);
+    const [defTelemetry, setDefTelemetry] = useState([]);
+    const [focusedDroneId, setFocusedDroneId] = useState(null);
 
     const hasOffensiveCams = hasCameraConfig(offensiveCameraConfig);
     const hasDefensiveCams = hasCameraConfig(defensiveCameraConfig);
@@ -67,6 +102,42 @@ const MapCombined = ({ enabled = true }) => {
     );
     const socketMode = offMode || defMode;
     const isConnected = isOffConnected || isDefConnected;
+
+    const droneEntries = useMemo(() => {
+        const combined = [...offTelemetry, ...defTelemetry];
+        combined.sort(
+            (a, b) => toTimestampMs(b.timestamp) - toTimestampMs(a.timestamp)
+        );
+        return combined;
+    }, [offTelemetry, defTelemetry]);
+
+    useEffect(() => {
+        if (!focusedDroneId) return;
+        const stillExists = droneEntries.some(
+            (drone) => drone.markerId === focusedDroneId
+        );
+        if (!stillExists) {
+            setFocusedDroneId(null);
+        }
+    }, [droneEntries, focusedDroneId]);
+
+    const flyToDrone = (drone) => {
+        if (!drone || !mapRef.current) return;
+        mapRef.current.flyTo({
+            center: [drone.longitude, drone.latitude],
+            zoom: 15.5,
+            pitch: 60,
+            bearing: -20,
+            speed: 0.8,
+            essential: true,
+        });
+
+    };
+
+    const handleDroneClick = (drone) => {
+        setFocusedDroneId(drone.markerId);
+        flyToDrone(drone);
+    };
 
     // ✅ Initialize map once (with 3D terrain and buildings)
     useEffect(() => {
@@ -124,9 +195,32 @@ const MapCombined = ({ enabled = true }) => {
 
     // 🟥 Offensive drones
     useEffect(() => {
-        if (!enabled) return;
+        if (!enabled) {
+            setOffTelemetry([]);
+            return;
+        }
         const normalized = normalizeOffensiveData(offData);
-        const objects = normalized.objects;
+        const objects = normalized.objects || [];
+
+        const offList = objects
+            .map((obj) => {
+                const markerId = obj.id || obj.droneId;
+                const latitude = Number(obj.lat);
+                const longitude = Number(obj.long);
+                if (!markerId || !isValidCoordinate(latitude, longitude))
+                    return null;
+                return {
+                    markerId,
+                    droneId: obj.droneId || obj.id || markerId,
+                    latitude,
+                    longitude,
+                    altitude: parseAltitude(obj.alt),
+                    timestamp: obj.timestamp,
+                    channel: "offensive",
+                };
+            })
+            .filter(Boolean);
+        setOffTelemetry(offList);
         if (!objects.length || !mapRef.current) return;
 
         objects.forEach((obj) => {
@@ -197,9 +291,47 @@ const MapCombined = ({ enabled = true }) => {
 
     // 🟢 Defensive drones
     useEffect(() => {
-        if (!enabled) return;
-        const objects = defData?.data?.objects || defData?.objects;
-        if (!objects || !mapRef.current) return;
+        if (!enabled) {
+            setDefTelemetry([]);
+            return;
+        }
+        const fallbackDefTimestamp =
+            defData?.timestamp ||
+            defData?.createdAt ||
+            defData?.updatedAt ||
+            defData?.detectedAt ||
+            defData?.data?.timestamp ||
+            defData?.data?.createdAt;
+        const objectsSource =
+            defData?.data?.objects || defData?.objects || defData?.detections;
+        const objects = Array.isArray(objectsSource) ? objectsSource : [];
+
+        setDefTelemetry(
+            objects
+                .map((obj) => {
+                    const { obj_id, objId, lat, lng, long, alt } = obj;
+                    const markerId = obj_id || objId;
+                    const longitude = Number(lng ?? long);
+                    const latitude = Number(lat);
+                    if (!markerId || !isValidCoordinate(latitude, longitude))
+                        return null;
+                    return {
+                        markerId,
+                        droneId: markerId,
+                        latitude,
+                        longitude,
+                        altitude: parseAltitude(alt),
+                        timestamp:
+                            obj.timestamp ||
+                            obj.detected_at ||
+                            fallbackDefTimestamp,
+                        channel: "defensive",
+                    };
+                })
+                .filter(Boolean)
+        );
+
+        if (!objects.length || !mapRef.current) return;
 
         objects.forEach((obj) => {
             const { obj_id, objId, lat, lng, long, size, alt } = obj;
@@ -282,8 +414,134 @@ const MapCombined = ({ enabled = true }) => {
                     </div>
                 </div>
             </div>
+            <div className="map-with-detail__detail">
+                <div className="flex items-start justify-between gap-3">
+                    <div>
+                        <p className="text-[11px] uppercase tracking-[0.4em] text-white/60">
+                            Active drones
+                        </p>
+                        <h3 className="text-xl font-semibold text-white">
+                            {droneEntries.length
+                                ? `${droneEntries.length} contact${
+                                      droneEntries.length > 1 ? "s" : ""
+                                  }`
+                                : "No contacts"}
+                        </h3>
+                        <p className="text-xs text-slate-400">
+                            Tap an entry to focus the map.
+                        </p>
+                    </div>
+                    <span className="text-[10px] uppercase tracking-[0.4em] text-white/50">
+                        {socketMode?.toUpperCase() || "MOCK"} socket
+                    </span>
+                </div>
+
+                {droneEntries.length ? (
+                    <ul className="space-y-3">
+                        {droneEntries.map((drone) => {
+                            const meta =
+                                DRONE_CHANNEL_META[drone.channel] ||
+                                DRONE_CHANNEL_META.offensive;
+                            const Icon = meta.Icon;
+                            const isActive =
+                                focusedDroneId === drone.markerId;
+                            return (
+                                <li key={`${drone.channel}-${drone.markerId}`}>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleDroneClick(drone)}
+                                        className={`w-full text-left rounded-2xl border px-4 py-3 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40 ${
+                                            isActive
+                                                ? "border-white/40 bg-white/5 shadow-lg shadow-rose-500/10"
+                                                : "border-white/10 hover:border-white/25 hover:bg-white/5"
+                                        }`}
+                                    >
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div className="flex items-center gap-3 text-white">
+                                                <span
+                                                    className={`flex h-9 w-9 items-center justify-center rounded-2xl border border-white/10 bg-white/5 ${isActive ? "border-white/30" : ""}`}
+                                                >
+                                                    <Icon
+                                                        size={16}
+                                                        className="text-white/80"
+                                                    />
+                                                </span>
+                                                <div>
+                                                    <p className="text-sm font-semibold">
+                                                        {drone.droneId}
+                                                    </p>
+                                                    <p className="text-[11px] uppercase tracking-[0.35em] text-slate-500">
+                                                        Track {drone.markerId}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <span
+                                                className={`text-[11px] px-2 py-0.5 rounded-full ${meta.badgeClass}`}
+                                            >
+                                                {meta.label}
+                                            </span>
+                                        </div>
+                                        <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-300">
+                                            <span>
+                                                Lat:{" "}
+                                                <strong className="text-slate-100">
+                                                    {formatCoord(
+                                                        drone.latitude
+                                                    )}
+                                                </strong>
+                                            </span>
+                                            <span className="text-right">
+                                                Long:{" "}
+                                                <strong className="text-slate-100">
+                                                    {formatCoord(
+                                                        drone.longitude
+                                                    )}
+                                                </strong>
+                                            </span>
+                                            <span>
+                                                Alt:{" "}
+                                                <strong className="text-slate-100">
+                                                    {formatAltitude(
+                                                        drone.altitude
+                                                    )}
+                                                </strong>
+                                            </span>
+                                            <span className="text-right">
+                                                Ping:{" "}
+                                                <strong className="text-slate-100">
+                                                    {formatTimestampLabel(
+                                                        drone.timestamp
+                                                    )}
+                                                </strong>
+                                            </span>
+                                        </div>
+                                    </button>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                ) : (
+                    <div className="map-with-detail__media map-with-detail__media--empty h-auto py-8">
+                        <div className="flex flex-col items-center gap-2 text-center px-4">
+                            <IconPlaceholder />
+                            <p className="text-sm text-slate-300">
+                                Waiting for live drone telemetry
+                            </p>
+                            <p className="text-xs text-slate-500">
+                                Once a drone reports in, it will appear here.
+                            </p>
+                        </div>
+                    </div>
+                )}
+            </div>
         </div>
     );
 };
+
+const IconPlaceholder = () => (
+    <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/60">
+        <Drone size={20} />
+    </div>
+);
 
 export default MapCombined;
