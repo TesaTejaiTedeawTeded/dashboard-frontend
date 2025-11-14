@@ -1,3 +1,4 @@
+const SOCKET_MODE = (import.meta.env.VITE_SOCKET_MODE || "mock").toLowerCase();
 import { useEffect, useRef, useState } from "react";
 import GlassPanel from "../components/ui/GlassPanel.jsx";
 import {
@@ -23,6 +24,25 @@ const channelThemes = {
 };
 
 const Mock = () => {
+    if (SOCKET_MODE === "real") {
+        return (
+            <div className="page-stack min-h-[60vh] items-center justify-center text-slate-300">
+                <GlassPanel className="p-6 text-center">
+                    <p className="text-sm uppercase tracking-[0.35em] text-white/60">
+                        Mock tools disabled
+                    </p>
+                    <p className="text-lg font-semibold text-white">
+                        Socket mode is set to REAL
+                    </p>
+                    <p className="text-sm text-slate-400">
+                        Switch VITE_SOCKET_MODE back to mock to access this
+                        page.
+                    </p>
+                </GlassPanel>
+            </div>
+        );
+    }
+
     const [offCam, setOffCam] = useState(null);
     const [defCam, setDefCam] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -147,7 +167,9 @@ const Mock = () => {
                 <p className="page-eyebrow">Mock control</p>
                 <div>
                     <h1 className="page-title">Camera credentials</h1>
-                    <p className="page-subtitle">MYSNAXX มันฝรั่งทอดที่โคตรอร่อย</p>
+                    <p className="page-subtitle">
+                        MYSNAXX มันฝรั่งทอดที่โคตรอร่อย
+                    </p>
                 </div>
             </header>
 

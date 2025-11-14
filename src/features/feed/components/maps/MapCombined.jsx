@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
+import { Drone, Shield } from "lucide-react";
 import { useSocket } from "../../../../hooks/useSocket.js";
 import {
     createCameraConfig,
@@ -149,15 +150,21 @@ const MapCombined = ({ enabled = true }) => {
                     offMarkersRef.current[markerId].setAltitude(altitude);
             } else {
                 const el = document.createElement("div");
-                const sizePx = 30 + (altitude ? Math.min(altitude / 5, 20) : 0);
-                el.style.width = `${sizePx}px`;
-                el.style.height = `${sizePx}px`;
-                el.style.background =
-                    "linear-gradient(135deg, rgba(248,113,113,0.9), rgba(251,113,133,0.9))";
-                el.style.borderRadius = "50%";
-                el.style.border = "1px solid rgba(255,255,255,0.7)";
-                el.style.boxShadow = "0 0 12px rgba(248,113,113,0.6)";
+                const iconSize = 28;
+                el.style.width = `${iconSize}px`;
+                el.style.height = `${iconSize}px`;
+                el.style.display = "flex";
+                el.style.alignItems = "center";
+                el.style.justifyContent = "center";
+                el.style.background = "rgba(15,23,42,0.9)";
+                el.style.borderRadius = "999px";
+                el.style.border = "1px solid rgba(255,255,255,0.4)";
+                el.style.boxShadow = "0 0 15px rgba(248,113,113,0.6)";
                 el.style.cursor = "pointer";
+
+                const icon = document.createElement("div");
+                icon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fca5a5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12h5"/><path d="M16.5 12h5"/><path d="M12 7.5v5"/><path d="M7 17.5l3.5-3.5"/><path d="M17 17.5L13.5 14"/><circle cx="12" cy="12" r="2"/></svg>`;
+                el.appendChild(icon);
 
                 const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(
                     buildPopupContent({
@@ -170,7 +177,7 @@ const MapCombined = ({ enabled = true }) => {
                             { label: "Long", value: formatCoord(longitude) },
                         ],
                         metaLabel: "Ping",
-                        metaValue: new Date(obj.timestamp || Date.now()).toLocaleTimeString(),
+                        metaValue: new Date(obj.timestamp || Date.now()).toLocaleTimeString("th-TH"),
                     })
                 );
 
@@ -213,16 +220,21 @@ const MapCombined = ({ enabled = true }) => {
                     defMarkersRef.current[id].setAltitude(altitude);
             } else {
                 const el = document.createElement("div");
-                const sizePx =
-                    size === "large" ? 50 : size === "medium" ? 40 : 30;
-                el.style.width = `${sizePx}px`;
-                el.style.height = `${sizePx}px`;
-                el.style.background =
-                    "linear-gradient(135deg, rgba(34,197,94,0.9), rgba(16,185,129,0.9))";
-                el.style.borderRadius = "50%";
-                el.style.border = "1px solid rgba(255,255,255,0.7)";
-                el.style.boxShadow = "0 0 12px rgba(34,197,94,0.6)";
+                const iconSize = 28;
+                el.style.width = `${iconSize}px`;
+                el.style.height = `${iconSize}px`;
+                el.style.display = "flex";
+                el.style.alignItems = "center";
+                el.style.justifyContent = "center";
+                el.style.background = "rgba(15,23,42,0.9)";
+                el.style.borderRadius = "999px";
+                el.style.border = "1px solid rgba(255,255,255,0.4)";
+                el.style.boxShadow = "0 0 15px rgba(34,197,94,0.6)";
                 el.style.cursor = "pointer";
+
+                const icon = document.createElement("div");
+                icon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#86efac" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="M4.93 4.93l1.41 1.41"/><path d="M17.66 17.66l1.41 1.41"/><path d="M17.66 6.34l1.41-1.41"/><path d="M4.93 19.07l1.41-1.41"/></svg>`;
+                el.appendChild(icon);
 
                 const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(
                     buildPopupContent({

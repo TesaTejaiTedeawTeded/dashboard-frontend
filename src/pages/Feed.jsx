@@ -13,7 +13,9 @@ const Feed = () => {
                 <div>
                     <h1 className="page-title">Dashboard</h1>
                     <p className="page-subtitle">
-                        I love you, you love me, we love each other, but we are friends.
+                        You love me and I love you อยากบอกว่า Want you. Please
+                        listen to me ได้ไหม No but you เอ๋า No but you, Will you
+                        marry me.
                     </p>
                 </div>
             </header>

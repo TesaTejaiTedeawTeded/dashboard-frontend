@@ -29,8 +29,9 @@ const DefenseAlertFeed = () => {
     // ✅ Fix timezone: treat timestamp as local (ignore UTC 'Z')
     const parseAsLocal = (timestamp) => {
         if (!timestamp) return "-";
-        const local = timestamp.replace("Z", ""); // remove UTC indicator
-        return new Date(local).toLocaleString("th-TH"); // Thailand locale
+        return new Date(timestamp).toLocaleString("th-TH", {
+            timeZone: "Asia/Bangkok",
+        });
     };
 
     const formatCoord = (value) =>

@@ -1,3 +1,5 @@
+const SOCKET_MODE = (import.meta.env.VITE_SOCKET_MODE || "mock").toLowerCase();
+
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useAuth } from "../../contexts/AuthContext.jsx";
@@ -28,33 +30,44 @@ const Navbar = () => {
             </div>
 
             <div className="relative flex items-center gap-1">
-                {links.map((link) => {
-                    const isActive = pathname === link.to;
+                {links
+                    .filter(
+                        (link) => SOCKET_MODE === "mock" || link.to !== "/mock"
+                    )
+                    .map((link) => {
+                        const isActive = pathname === link.to;
 
-                    return (
-                        <Link
-                            key={link.to}
-                            to={link.to}
-                            className={`nav-link ${isActive ? "text-white" : "text-slate-300"}`}
-                        >
-                            {isActive && (
-                                <motion.span
-                                    layoutId="nav-active"
-                                    className="nav-link__active"
-                                    transition={{
-                                        type: "spring",
-                                        stiffness: 420,
-                                        damping: 35,
-                                    }}
-                                />
-                            )}
-                            <span className="relative z-10">{link.label}</span>
-                        </Link>
-                    );
-                })}
+                        return (
+                            <Link
+                                key={link.to}
+                                to={link.to}
+                                className={`nav-link ${
+                                    isActive ? "text-white" : "text-slate-300"
+                                }`}
+                            >
+                                {isActive && (
+                                    <motion.span
+                                        layoutId="nav-active"
+                                        className="nav-link__active"
+                                        transition={{
+                                            type: "spring",
+                                            stiffness: 420,
+                                            damping: 35,
+                                        }}
+                                    />
+                                )}
+                                <span className="relative z-10">
+                                    {link.label}
+                                </span>
+                            </Link>
+                        );
+                    })}
             </div>
 
-            <button onClick={handleSignOut} className="glass-button glass-button--ghost">
+            <button
+                onClick={handleSignOut}
+                className="glass-button glass-button--ghost"
+            >
                 Sign Out
             </button>
         </nav>

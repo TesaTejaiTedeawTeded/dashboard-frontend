@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
+import { Drone } from "lucide-react";
 import { useSocket } from "../../../../hooks/useSocket.js";
 import {
     createCameraConfig,
@@ -21,7 +22,7 @@ const formatCoord = (value) =>
 const formatAltitude = (value) => (Number.isFinite(value) ? `${value} m` : "-");
 
 const formatTime = (value) =>
-    value ? new Date(value).toLocaleTimeString() : "-";
+    value ? new Date(value).toLocaleTimeString("th-TH") : "-";
 
 const formatDetailTimestamp = (value) =>
     value ? new Date(value).toLocaleString("th-TH") : "-";
@@ -243,15 +244,21 @@ const MapOffensive = ({ enabled = true }) => {
             } else {
                 const el = document.createElement("div");
                 el.className = "drone-marker";
-                const sizePx = 35 + (altitude ? Math.min(altitude / 5, 15) : 0);
-                el.style.width = `${sizePx}px`;
-                el.style.height = `${sizePx}px`;
-                el.style.background =
-                    "linear-gradient(135deg, rgba(248,113,113,0.9), rgba(239,68,68,0.9))";
-                el.style.borderRadius = "50%";
+                const iconSize = 32;
+                el.style.width = `${iconSize}px`;
+                el.style.height = `${iconSize}px`;
+                el.style.display = "flex";
+                el.style.alignItems = "center";
+                el.style.justifyContent = "center";
+                el.style.background = "rgba(15,23,42,0.9)";
+                el.style.borderRadius = "999px";
+                el.style.border = "1px solid rgba(255,255,255,0.4)";
+                el.style.boxShadow = "0 0 15px rgba(248,113,113,0.6)";
                 el.style.cursor = "pointer";
-                el.style.border = "1px solid rgba(255,255,255,0.7)";
-                el.style.boxShadow = "0 0 12px rgba(248,113,113,0.6)";
+
+                const icon = document.createElement("div");
+                icon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fca5a5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12h5"/><path d="M16.5 12h5"/><path d="M12 7.5v5"/><path d="M7 17.5l3.5-3.5"/><path d="M17 17.5L13.5 14"/><circle cx="12" cy="12" r="2"/></svg>`;
+                el.appendChild(icon);
 
                 const handleMarkerClick = (event) => {
                     event?.stopPropagation();
